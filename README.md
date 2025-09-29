@@ -1,5 +1,5 @@
 # Warning
-This is intended for preview only. Running on different machine is still not yet made available as directories are purely static/fixed.
+This is intended for preview only. Running on different machine is still not yet made available as directories are purely static/fixed (e.g. I use a shell file to run python in virtual environment for development instead of building it into a module).
 
 # Info
 This is a simple image editing desktop application using Python, NeutralinoJS, and VueJS that would (as envisioned) run in both Windows and Debian-based Linux distro. Its purpose is for compliance to an academic activity.
