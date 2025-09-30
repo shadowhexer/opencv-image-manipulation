@@ -1,70 +1,7 @@
-import numpy as np, base64, sys, os, cv2
+import sys,cv2
 from NeutralinoExtension import *
 from filters import *
-
-# holds the last loaded image as OpenCV BGR array
-class FileHandling:
-    """Handles image import/export and conversion to/from data URLs."""
-    def __init__(self):
-        self.images = {}
-        self.previews = {}
-
-
-    def image_to_dataurl(self, image=None, fmt='png'):
-
-        # encode image to memory then to base64 data URL
-        ext = str(fmt).lower().strip()
-
-        # Ensure dtype = uint8
-        if image.dtype != 'uint8':
-            image = image.astype('uint8')
-
-        # Strip alpha for JPEG
-        if ext in ["jpg", "jpeg"] and image.ndim == 3 and image.shape[2] == 4:
-            image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
-
-        success, buffer = cv2.imencode(f'.{ext}', image)
-        if not success:
-            raise RuntimeError('Failed to encode image')
-        b64 = base64.b64encode(buffer).decode('ascii')
-        return f'data:image/{fmt};base64,{b64}'
-
-    # Import image
-    def save_dataurl_to_memory(self, data_url: str, filename: str):
-        """Decode a data URL and save it to disk. Returns the absolute path."""
-        
-        if ',' not in data_url:
-            raise ValueError('Invalid data URL')
-        __, b64 = data_url.split(',', 1)
-        # Decode base64 into raw bytes
-        raw = base64.b64decode(b64)
-
-        np_arr = np.frombuffer(raw, np.uint8)
-        img = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
-        if img is None:
-            raise ValueError(f"Failed to decode image: {filename}")
-        else:
-            self.images[filename] = img
-
-            ext.sendMessage('debugLog', {
-                'step': 'AFTER_IMPORT',
-                'filename': filename,
-                'shape': img.shape,
-                'keys_count': len(self.images),
-                'keys': list(self.images.keys())
-            })
-
-
-    # Export image
-    def load_image_as_dataurl(self, input_path: str, fmt: str = 'jpg'):
-        """Read image from disk and return a base64 data URL (uses image_to_dataurl)."""
-        if not os.path.isfile(input_path):
-            raise FileNotFoundError(input_path)
-        image = cv2.imread(input_path)
-        if image is None:
-            raise RuntimeError(f'Failed to read image: {input_path}')
-        return self.image_to_dataurl(image=image, fmt=fmt)
-
+from FileHandling import FileHandling
 
 def main(msg):
 
@@ -93,17 +30,12 @@ def main(msg):
         filenames = data.get('filename')
         filters = data.get('filters', {})
 
-        ext.sendMessage('debugLog', {
-            'step': 'BEFORE_LOOKUP',
-            'filename': filenames,
-            'keys_count': len(fh.images),
-            'first_keys': list(fh.images.keys())[:5]
-        })
-
         try:
             if func == 'final':
 
-                fh.previews[filenames] = apply_filters(image=fh.images[filenames], filters=filters)
+                filter.push(filters)
+                fh.previews[filenames] = apply_filters(image=fh.images[filenames], filters=filter.filters[-1])
+                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.7, fy=0.7, interpolation=cv2.INTER_AREA)
                 image = fh.image_to_dataurl(image=fh.previews[filenames], fmt='png')
                 
                 ext.sendMessage('imageAdjusted', {
@@ -115,10 +47,11 @@ def main(msg):
 
             elif func == 'preview':
                 fh.previews[filenames] = apply_filters(
-                    image=fh.previews[filenames] if filenames in fh.previews else fh.images[filenames], 
+                    image=fh.images[filenames], 
                     filters=filters
                 )
-                image = fh.image_to_dataurl(image=fh.previews[filenames], fmt='jpeg')
+                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
+                image = fh.image_to_dataurl(image=resized_image, fmt='jpeg')
                 ext.sendMessage('imageAdjusted', {
                     'status' : True,   
                     'filename' : filenames, 
