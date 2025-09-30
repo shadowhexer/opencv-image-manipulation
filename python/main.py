@@ -31,21 +31,7 @@ def main(msg):
         filters = data.get('filters', {})
 
         try:
-            if func == 'final':
-
-                filter.push(filters)
-                fh.previews[filenames] = apply_filters(image=fh.images[filenames], filters=filter.filters[-1])
-                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.7, fy=0.7, interpolation=cv2.INTER_AREA)
-                image = fh.image_to_dataurl(image=fh.previews[filenames], fmt='png')
-                
-                ext.sendMessage('imageAdjusted', {
-                    'status' : True,   
-                    'filename' : filenames, 
-                    'dataUrl' : image,
-                    'filters' : filters
-                })
-
-            elif func == 'preview':
+            if func == 'cached':
                 fh.previews[filenames] = apply_filters(
                     image=fh.images[filenames], 
                     filters=filters
@@ -57,6 +43,34 @@ def main(msg):
                     'filename' : filenames, 
                     'dataUrl' : image,
                     'filters' : filters
+                })
+
+            elif func == 'preview':
+
+                filter.push(filters)
+                fh.previews[filenames] = apply_filters(image=fh.images[filenames], filters=filter.filters[-1])
+                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.6, fy=0.6, interpolation=cv2.INTER_AREA)
+                image = fh.image_to_dataurl(image=resized_image, fmt='png')
+                
+                ext.sendMessage('imageAdjusted', {
+                    'status' : True,   
+                    'filename' : filenames, 
+                    'dataUrl' : image,
+                    'filters' : filters
+                })
+            
+            elif func == 'final':
+                export_images = []
+                
+                for (filename, image) in fh.previews.items():
+                     export_images.append({
+                        'filename': filename,
+                        'url': fh.image_to_dataurl(image=image, fmt='png')
+                    })
+                
+                ext.sendMessage('imageExport', {
+                    'status' : True,   
+                    'data' : export_images
                 })
         except Exception as e:
 

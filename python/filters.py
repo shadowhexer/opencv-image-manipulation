@@ -104,6 +104,7 @@ def blur(image, strength=255):
     return image
 
 def hue(image, strength=255):
+    """Apply hue to the image."""
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     (h, s, v) = cv.split(hsv)
 
@@ -120,6 +121,7 @@ def hue(image, strength=255):
     return image
 
 def saturation(image, strength=255):
+    """Apply saturation to the image."""
     hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
     (h, s, v) = cv.split(hsv)
 
@@ -134,6 +136,7 @@ def saturation(image, strength=255):
     return image
 
 def contrast(image, strength=255):
+    """Apply contrast to the image."""
     lab = cv.cvtColor(image, cv.COLOR_BGR2Lab)
     (l, a, b) = cv.split(lab)
 
@@ -148,6 +151,7 @@ def contrast(image, strength=255):
     return image
 
 def brightness(image, strength=128):
+    """Increase or decrease the image's brightness."""
     beta = int(strength - 128)
     image = cv.convertScaleAbs(src=image, alpha=1.0, beta=beta)
     return image

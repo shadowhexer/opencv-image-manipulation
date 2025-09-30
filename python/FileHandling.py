@@ -1,4 +1,4 @@
-import numpy as np, base64, os, cv2
+import numpy as np, base64, cv2
 
 class FileHandling:
     """Handles image import/export and conversion to/from data URLs."""
@@ -42,14 +42,3 @@ class FileHandling:
             raise ValueError(f"Failed to decode image: {filename}")
         else:
             self.images[filename] = img
-
-
-    # Export image
-    def load_image_as_dataurl(self, input_path: str, fmt: str = 'jpg'):
-        """Read image from disk and return a base64 data URL (uses image_to_dataurl)."""
-        if not os.path.isfile(input_path):
-            raise FileNotFoundError(input_path)
-        image = cv2.imread(input_path)
-        if image is None:
-            raise RuntimeError(f'Failed to read image: {input_path}')
-        return self.image_to_dataurl(image=image, fmt=fmt)
