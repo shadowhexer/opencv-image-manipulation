@@ -3,17 +3,28 @@ from collections import deque
 
 class Filters:
     """A simple stack-based undo/redo system for image filters."""
-    def __init__(self, maxleen=20):
-        self.filters = deque(maxlen=maxleen)
+    def __init__(self, maxlen=20):
+        self.filters = deque(maxlen=maxlen)
+        self.temp_filters = deque(maxlen=maxlen)
         self.index = -1
 
-    def push(self, filter_dicts: dict):
+    def push(self, filter_data: list | dict, mode: str):
         """Apply new filters and push to stack."""
-        while len(self.filters) - 1 > self.index:
-            self.filters.pop()
 
-        self.filters.append(dict(filter_dicts))
-        self.index = len(self.filters) - 1
+        if len(self.temp_filters) == 0:
+            return
+
+        if mode == "temp":
+            self.temp_filters.append(filter_data)
+
+        elif mode == "preview":
+            while len(self.filters) - 1 > self.index:
+                self.filters.pop()
+
+            self.filters.append(self.temp_filters[-1])
+            self.temp_filters.clear()
+
+            self.index = len(self.filters) - 1
 
     def undo(self, image):
         if self.index > 0:
@@ -30,69 +41,104 @@ class Filters:
         return None
 
 
-def apply_filters(image, filters):
+def apply_filters(image, data: dict):
     """Apply a series of filters to an image."""
 
-    # Handle sharpen separately
-    sharpen_cfg = filters.get('sharpen', {})
-    amount = sharpen_cfg.get('amount', 1.0)
-    threshold = sharpen_cfg.get('threshold', 10)
+    for (section, values) in data.items():
+        for (name, val) in values.items():
+            func = globals().get(name)
+            if not callable(func):
+                continue
 
-    if amount != 0 or threshold != 0:
-        image = unsharp_mask(image, amount=float(amount), threshold=float(threshold))
-
-    # Other filters
-    for name, default in {
-        "grayscale": 255.0,
-        "sepia": 255.0,
-        "blur": 255.0,
-        "hue": 255.0,
-        "saturation": 255.0,
-        "contrast": 255.0,
-        "brightness": 128.0,
-    }.items():
-        strength = float(filters.get(name, default))
-        if strength != 0:  # <-- skip if zero
-            func = globals()[name] # Call all functions
-            image = func(image, strength=strength)
+            if isinstance(val, bool) and val:
+                image = func(image=image)
+            elif isinstance(val, (int, float)) and val != 0:
+                image = func(image=image, strength=val)
 
     return image
 
 
-# From OpenCV documentation https://docs.opencv.org/4.x/d1/d10/classcv_1_1MatExpr.html#details
-def unsharp_mask(image, kernel_size=(5, 5), sigma=1.0, amount=1.0, threshold=10):
-    """Return a sharpened version of the image, using an unsharp mask."""
-    blurred = cv.GaussianBlur(image, kernel_size, sigma)
-    sharpened = (amount + 1) * image - amount * blurred
-    sharpened = np.clip(sharpened, 0, 255).round().astype(np.uint8)
-    if threshold > 0:
-        low_contrast_mask = np.absolute(image - blurred) < threshold
-        np.copyto(sharpened, image, where=low_contrast_mask)
-    return sharpened
-
-def grayscale(image, strength=255):
+def grayscale(image):
     """Convert image to grayscale."""
 
-    alpha = 1 - (strength / 255.0)
     gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
-    gray2bgr = cv.cvtColor(gray, cv.COLOR_GRAY2BGR)
-    image = cv.addWeighted(image, alpha, gray2bgr, 1 - alpha, 0)
+    image = cv.cvtColor(gray, cv.COLOR_GRAY2BGR)
     return image
 
-
-# From GeeksforGeeks https://www.geeksforgeeks.org/computer-vision/creating-instagram-filters-with-opencv-and-python/
-def sepia(image, strength=255):
+# From Filipe Chagas https://gist.github.com/FilipeChagasDev/bb63f46278ecb4ffe5429a84926ff812
+def sepia(image):
     """Apply sepia filter to image."""
-    alpha = 1 - (strength / 255.0)
-    sepia = np.array([[0.272, 0.534, 0.131],
-                  [0.349, 0.686, 0.168],
-                  [0.393, 0.769, 0.189]])
-    
-    sepia_image = cv.transform(image, sepia)
-    image = cv.addWeighted(src1=image, alpha=alpha, src2=sepia_image, beta=1 - alpha, gamma=0)
+    gray = cv.cvtColor(image, cv.COLOR_BGR2GRAY)
+    normalized_gray = np.array(gray, np.float32)/255
+    #solid color
+    sepia = np.ones(image.shape)
+    sepia[:,:,0] *= 153 #B
+    sepia[:,:,1] *= 204 #G
+    sepia[:,:,2] *= 255 #R
+    #hadamard
+    sepia[:,:,0] *= normalized_gray #B
+    sepia[:,:,1] *= normalized_gray #G
+    sepia[:,:,2] *= normalized_gray #R
+    image = np.array(sepia, np.uint8)
     return image
 
-def blur(image, strength=255):
+# Adjustments
+
+def brightness(image, strength=float(0)):
+    """Increase or decrease the image's brightness."""
+    image = cv.cvtColor(image, cv.COLOR_BGR2HSV).astype("float32")
+    (h, s, v) = cv.split(image)
+    value = np.clip(v + strength, 0, 255)
+
+    hsv = cv.merge([h, s, value])
+    hsv = np.clip(hsv, 0, 255).astype("uint8")
+    image = cv.cvtColor(hsv, cv.COLOR_HSV2BGR)
+    return image
+
+def contrast(image, strength=float(0)):
+    """Apply contrast to the image."""
+    lab = cv.cvtColor(image, cv.COLOR_BGR2Lab)
+    (l, a, b) = cv.split(lab)
+
+    scale = 1 + (strength / 100.0)
+    
+    a = np.clip((a.astype(float) - 128) * scale + 128, 0, 255).astype(np.uint8)
+    b = np.clip((b.astype(float) - 128) * scale + 128, 0, 255).astype(np.uint8)
+
+    merge = cv.merge([l,a,b])
+    image = cv.cvtColor(merge, cv.COLOR_Lab2BGR)
+
+    return image
+
+def saturation(image, strength=float(0)):
+    """Apply saturation to the image."""
+    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    (h, s, v) = cv.split(hsv)
+
+    shift = 1 + (strength / 100.0)
+
+    s = np.clip(s.astype(float) * shift, 0, 255).astype(np.uint8)
+
+    merge = cv.merge([h,s,v])
+    image = cv.cvtColor(merge, cv.COLOR_HSV2BGR)
+
+    return image
+
+def hue(image, strength=float(0)):
+    """Apply hue to the image."""
+    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
+    (h, s, v) = cv.split(hsv)
+
+    # Add shift and wrap around (OpenCV hue range is [0,179])
+    h = (h.astype(int) + strength) % 180
+    h = h.astype(np.uint8)
+
+    merge = cv.merge([h,s,v])
+    image = cv.cvtColor(merge, cv.COLOR_HSV2BGR)
+    
+    return image
+
+def blur(image, strength=float(0)):
     """Apply Averaging blur to image."""
 
     # Ensure minimum of 1 and make it odd
@@ -103,57 +149,24 @@ def blur(image, strength=255):
     image = cv.blur(src=image, ksize=ksize)
     return image
 
-def hue(image, strength=255):
-    """Apply hue to the image."""
-    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
-    (h, s, v) = cv.split(hsv)
+# From OpenCV documentation https://docs.opencv.org/4.x/d1/d10/classcv_1_1MatExpr.html#details
+def sharpen(image, kernel_size=(5, 5), sigma=1.0, strength=float(0), threshold=10):
+    """Return a sharpened version of the image, using an unsharp mask."""
+    blurred = cv.GaussianBlur(image, kernel_size, sigma)
+    sharpened = (strength + 1) * image - strength * blurred
+    sharpened = np.clip(sharpened, 0, 255).round().astype(np.uint8)
+    if threshold > 0:
+        low_contrast_mask = np.absolute(image - blurred) < threshold
+        np.copyto(sharpened, image, where=low_contrast_mask)
+    return sharpened
 
-    # Map slider (0–255) → shift (0–179)
-    shift = int((strength / 255.0) * 179)
-
-    # Add shift and wrap around (OpenCV hue range is [0,179])
-    h = (h.astype(int) + shift) % 180
-    h = h.astype(np.uint8)
-
-    merge = cv.merge([h,s,v])
-    image = cv.cvtColor(merge, cv.COLOR_HSV2BGR)
-    
+def grain(image, strength=float(0)):
     return image
 
-def saturation(image, strength=255):
-    """Apply saturation to the image."""
-    hsv = cv.cvtColor(image, cv.COLOR_BGR2HSV)
-    (h, s, v) = cv.split(hsv)
-
-    # Map slider (0–255) → shift (0–179)
-    shift = strength / 128.0
-
-    s = np.clip(s.astype(float) * shift, 0, 255).astype(np.uint8)
-
-    merge = cv.merge([h,s,v])
-    image = cv.cvtColor(merge, cv.COLOR_HSV2BGR)
-
+def vignette(image, strength=float(0)):
     return image
 
-def contrast(image, strength=255):
-    """Apply contrast to the image."""
-    lab = cv.cvtColor(image, cv.COLOR_BGR2Lab)
-    (l, a, b) = cv.split(lab)
-
-    scale = strength / 128.0
-    
-    a = np.clip((a.astype(float) - 128) * scale + 128, 0, 255).astype(np.uint8)
-    b = np.clip((b.astype(float) - 128) * scale + 128, 0, 255).astype(np.uint8)
-
-    merge = cv.merge([l,a,b])
-    image = cv.cvtColor(merge, cv.COLOR_Lab2BGR)
-
-    return image
-
-def brightness(image, strength=128):
-    """Increase or decrease the image's brightness."""
-    beta = int(strength - 128)
-    image = cv.convertScaleAbs(src=image, alpha=1.0, beta=beta)
+def glow(image, strength=float(0)):
     return image
 
 filter = Filters()

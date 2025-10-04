@@ -32,11 +32,12 @@ def main(msg):
 
         try:
             if func == 'cached':
+                filter.push(filter_data=filters, mode="temp")
                 fh.previews[filenames] = apply_filters(
                     image=fh.images[filenames], 
-                    filters=filters
+                    data=filters
                 )
-                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.3, fy=0.3, interpolation=cv2.INTER_AREA)
+                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
                 image = fh.image_to_dataurl(image=resized_image, fmt='jpeg')
                 ext.sendMessage('imageAdjusted', {
                     'status' : True,   
@@ -47,16 +48,18 @@ def main(msg):
 
             elif func == 'preview':
 
-                filter.push(filters)
-                fh.previews[filenames] = apply_filters(image=fh.images[filenames], filters=filter.filters[-1])
-                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.6, fy=0.6, interpolation=cv2.INTER_AREA)
+                if len(filter.temp_filters) > 0:
+                    filter.push(mode="preview")
+
+                fh.previews[filenames] = apply_filters(image=fh.images[filenames], data=filter.filters[-1])
+                resized_image = cv2.resize(fh.previews[filenames], None, fx=0.7, fy=0.7, interpolation=cv2.INTER_AREA)
                 image = fh.image_to_dataurl(image=resized_image, fmt='png')
                 
                 ext.sendMessage('imageAdjusted', {
                     'status' : True,   
                     'filename' : filenames, 
                     'dataUrl' : image,
-                    'filters' : filters
+                    'filters' : filter.filters[-1]
                 })
             
             elif func == 'final':
