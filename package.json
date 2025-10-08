@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@neutralinojs/neu": "^11.6.0",
+    "vue": "^3.5.21"
+  }
+}
